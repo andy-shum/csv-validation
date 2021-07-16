@@ -1,0 +1,106 @@
+openapi: 3.0.0
+
+info:
+  version: 1.0.0
+  title: CSV Service
+  description: The CSV service
+  
+tags:
+  - name: "CSV Processing"
+  
+paths:
+
+  /validation:
+    post:
+      summary: CSV validation
+      tags:
+        - "CSV Processing"
+      description: User needs to *validate* the CSV file
+      operationId: csvValidation
+      requestBody:
+        description: User needs to *validate* the CSV file
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CsvEntity'
+      responses:
+        "200":
+          description: Get posts successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+                  
+components:
+
+  schemas:
+  
+    CsvEntity:
+      description: This is a request model
+      type: object
+      properties:
+        filePath:
+          description: The CSV file path
+          type: string
+          example: /Users/andyshum/data.csv
+        delimiter:
+          description: The CSV file delimiter
+          type: string
+          example: |
+        config:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigEntity'
+            
+    ConfigEntity:
+      description: This is a config model
+      type: object
+      properties:
+        columnType:
+          description: Type of column
+          type: string
+          example: datetime
+        allowEmpty:
+          description: Does the field allow empty or not
+          type: boolean
+          example: true
+        letterCase:
+          description: U for upper case, L for lower case, other or empty is for mixed case
+          type: string
+          example: U
+        dateFormat:
+          description: Date format for date column
+          type: string
+          example: dd-MM-yyyy
+          
+    ValidationResult:
+      description: This is a posting response model
+      type: object
+      properties:
+        returnCode:
+          description: The return code
+          type: string
+          example: SUCCESS-001
+        returnDesc:
+          description: The return description
+          type: string
+          example: The CSV vaildation result is positive
+        errorDetail:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorEntity'
+            
+    ErrorEntity:
+      description: This is the error entity
+      type: object
+      properties:
+        rowNumber:
+          description: The row number where error is found
+          type: integer
+        columnNumber:
+          description: The column number where error is found
+          type: integer
+        errorDesc:
+          description: Description of error
+          type: string
