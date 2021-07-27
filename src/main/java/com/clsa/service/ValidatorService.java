@@ -46,10 +46,13 @@ public class ValidatorService {
 	private StringValidator stringValidator;
 	
 	@Async
-	public CompletableFuture<List<ErrorEntity>> validateLine(CsvEntity body, String[] values, int lineNum, UUID uuid) {
-		logger.info("entering validateLine | lineNum: {}, values: {}", lineNum, values);
+	public CompletableFuture<List<ErrorEntity>> validateLine(CsvEntity body, String line, int lineNum, UUID uuid) {
+		//logger.info("entering validateLine | lineNum: {}, line: {}", lineNum, line);
 
 		List<ErrorEntity> errors = new ArrayList<ErrorEntity>();
+		
+		String delimiter = body.getDelimiter().equals("|") ? "\\|" : body.getDelimiter();
+		String[] values = line.split(delimiter);
 		
 		// try to stop process if error exceed limit
 		if (MapUtil.isExceed(uuid)) {

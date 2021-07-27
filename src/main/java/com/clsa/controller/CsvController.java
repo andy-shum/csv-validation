@@ -15,6 +15,7 @@ import com.clsa.csvservice.models.ValidationResult;
 import com.clsa.error.ApiErrorCode;
 import com.clsa.service.CsvService;
 import com.clsa.util.ApiUtil;
+import com.clsa.util.MapUtil;
 
 @RestController
 /**
@@ -34,11 +35,24 @@ public class CsvController implements ValidationApi {
 	@Override
 	public ResponseEntity<ValidationResult> csvValidation(@Valid CsvEntity body) {
 		
-		logger.info("entering csvValidation | body: {}", body);
+		logger.info("entering csvValidation | filePath: {}", body.getFilePath());
 		
 		ValidationResult response = new ValidationResult();
 		
+		long startTime = System.currentTimeMillis();
+		
+		if (MapUtil.isThrottling()) {
+			logger.info("processing csvValidation | reach throttling");
+			ApiUtil.setResponse(response, ApiErrorCode.API_THROTTLING);
+			return new ResponseEntity<>(response, HttpStatus.TOO_MANY_REQUESTS);
+		}
+		
 		if (csvService.isCsvValid(body, response)) {
+			
+			long endTime = System.currentTimeMillis();
+			long duration = endTime - startTime;
+			logger.info("Total Time Spent: {}", String.valueOf(duration));
+			
 			response.setReturnCode(SUCCESS_CODE);
 			response.setReturnDesc(SUCCESS_DESC);
 		    return new ResponseEntity<>(response, HttpStatus.OK);

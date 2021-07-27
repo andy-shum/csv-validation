@@ -1,9 +1,14 @@
 package com.clsa.service;
 
-import java.io.BufferedReader;
+//import java.io.BufferedReader;
 import java.io.FileNotFoundException;
-import java.io.FileReader;
+//import java.io.FileReader;
 import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -36,7 +41,7 @@ public class CsvService {
 
 	// to check if input is valid
 	private boolean isInputValid(CsvEntity body, ValidationResult response) {
-		logger.info("entering isInputValid | body: {}", body);
+		logger.info("entering isInputValid | body.filePath: {}", body.getFilePath());
 
 		if (null == body.getFilePath() || body.getFilePath().isEmpty()) {
 			ApiUtil.setResponse(response, ApiErrorCode.INPUT_ERROR_FILEPATH_EMPTY);
@@ -56,7 +61,7 @@ public class CsvService {
 	
 	// to check if the file path is valid
 	private boolean isPathAndFileExist(CsvEntity body, ValidationResult response) {
-		logger.info("entering isPathAndFileExist | body: {}", body);
+		logger.info("entering isPathAndFileExist | body.filePath: {}", body.getFilePath());
 
 		if (!FileUtil.isFileExist(body.getFilePath())) {
 			ApiUtil.setResponse(response, ApiErrorCode.CSV_FILE_NOT_FOUND);
@@ -67,34 +72,74 @@ public class CsvService {
 
 	// to check if csv file content is valid
 	private boolean isContentValid(CsvEntity body, ValidationResult response) {
-		logger.info("entering isContentValid | body: {}", body);
+		logger.info("entering isContentValid | body.filePath: {}", body.getFilePath());
+		
+		long startTime1 = System.currentTimeMillis();
+		
+		RandomAccessFile writer = null;
+		FileLock lock = null;
+		List<String> lines = null;
+		
+		try {
+			// open file in read-write mode
+		    writer = new RandomAccessFile(body.getFilePath(), "rw");
+	
+		    // lock file
+		    lock = writer.getChannel().tryLock();
+		    
+		    // read file content into lines object
+		    lines = Files.readAllLines(Paths.get(body.getFilePath()));
+	
+		    // release lock
+		    lock.release();
+	
+		    // close the file
+		    writer.close();
 
-		// read the csv file and validate the content
-		try (BufferedReader br = new BufferedReader(new FileReader(body.getFilePath()))) {
+		} catch (FileNotFoundException e) {
+			logger.error("processing isContentValid | exception: {}", e.getMessage());
+			ApiUtil.setResponse(response, ApiErrorCode.CSV_FILE_NOT_FOUND);
+			return false;
+		} catch (OverlappingFileLockException e) {
+			logger.error("processing isContentValid | exception: {}", e.getMessage());
+			ApiUtil.setResponse(response, ApiErrorCode.CSV_FILE_IS_LOCKED);
+			return false;
+		} catch (Exception e) {
+			logger.error("processing isContentValid | exception: {}", e.getMessage());
+			ApiUtil.setResponse(response, ApiErrorCode.GENERAL_ERROR);
+			return false;
+		}
+		
+		try {
+
 			List<CompletableFuture<List<ErrorEntity>>> errorList = new ArrayList<CompletableFuture<List<ErrorEntity>>>();
-			String line;
+
 			int lineNum = 1;
 			
 			// insert uuid in map for counting the number of errors
 			UUID uuid = UUID.randomUUID();
 			MapUtil.add(uuid);
 			
-			while ((line = br.readLine()) != null) {
-				String delimiter = body.getDelimiter().equals("|") ? "\\|" : body.getDelimiter();
-				String[] values = line.split(delimiter);
+			for (String line : lines) {
+				
 				// validate line by line
-				CompletableFuture<List<ErrorEntity>> error = validatorService.validateLine(body, values, lineNum++, uuid);
+				CompletableFuture<List<ErrorEntity>> error = validatorService.validateLine(body, line, lineNum++, uuid);
 				errorList.add(error);
 			}
 			CompletableFuture<?>[] errorArray = new CompletableFuture<?>[errorList.size()];
 			errorList.toArray(errorArray);
 			CompletableFuture<Void> allFutures = CompletableFuture.allOf(errorArray);
 
-			CompletableFuture<Object> allCompletableFuture = allFutures.thenApply(future -> {
+			CompletableFuture<Object> allCompletableFuture = allFutures.thenApplyAsync(future -> {
 				return errorList.stream().map(completableFuture -> completableFuture.join())
 						.collect(Collectors.toList());
 			});
 			
+			long endTime1 = System.currentTimeMillis();
+			long duration1 = endTime1 - startTime1;
+			logger.info("Time Spent on validate content part 1: {}", String.valueOf(duration1));
+			
+			long startTime2 = System.currentTimeMillis();
 			
 			// get the result from multi thread processing
 			List<List<ErrorEntity>> allErrors = (List<List<ErrorEntity>>) allCompletableFuture.get();
@@ -110,6 +155,10 @@ public class CsvService {
 			
 			// clean up the map after finish
 			MapUtil.remove(uuid);
+			
+			long endTime2 = System.currentTimeMillis();
+			long duration2 = endTime2 - startTime2;
+			logger.info("Time Spent on validate content part 2: {}", String.valueOf(duration2));
 		      
 			if (finalErrors.size() > 0) {
 				logger.info("processing isContentValid | finalErrors.size(): {}", finalErrors.size());
@@ -118,19 +167,12 @@ public class CsvService {
 				return false;
 			}
 
-		} catch (FileNotFoundException e) {
+		} catch (OverlappingFileLockException e) {
 			logger.error("processing isContentValid | exception: {}", e.getMessage());
-			e.printStackTrace();
-			ApiUtil.setResponse(response, ApiErrorCode.CSV_FILE_NOT_FOUND);
-			return false;
-		} catch (IOException e) {
-			logger.error("processing isContentValid | exception: {}", e.getMessage());
-			e.printStackTrace();
-			ApiUtil.setResponse(response, ApiErrorCode.CSV_PARSE_ERROR);
+			ApiUtil.setResponse(response, ApiErrorCode.CSV_FILE_IS_LOCKED);
 			return false;
 		} catch (Exception e) {
 			logger.error("processing isContentValid | exception: {}", e.getMessage());
-			e.printStackTrace();
 			ApiUtil.setResponse(response, ApiErrorCode.GENERAL_ERROR);
 			return false;
 		}
@@ -139,15 +181,23 @@ public class CsvService {
 	}
 
 	public boolean isCsvValid(CsvEntity body, ValidationResult response) {
-		logger.info("entering isCsvValid | body: {}", body);
+		logger.info("entering isCsvValid | filePath: {}", body.getFilePath());
 		
+		long startTime1 = System.currentTimeMillis();
 		if (!isInputValid(body, response)) {
 			return false;
 		}
+		long endTime1 = System.currentTimeMillis();
+		long duration1 = endTime1 - startTime1;
+		logger.info("Total Time Spent on validate input: {}", String.valueOf(duration1));
 		
+		long startTime2 = System.currentTimeMillis();
 		if (!isPathAndFileExist(body, response)) {
 			return false;
 		}
+		long endTime2 = System.currentTimeMillis();
+		long duration2 = endTime2 - startTime2;
+		logger.info("Total Time Spent on validate filepath: {}", String.valueOf(duration2));
 
 		if (!isContentValid(body, response)) {
 			return false;

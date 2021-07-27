@@ -24,7 +24,7 @@ public class DatetimeValidator extends BaseValidator {
 	private static final Logger logger = LogManager.getLogger(DatetimeValidator.class);
 	
 	public ErrorEntity validate(int colNum, int rowNum, String value, ConfigEntity configEntity) {
-		logger.info("entering validate | colNum: {}, rowNum: {}, value: {}", colNum, rowNum, value);
+		//logger.info("entering validate | colNum: {}, rowNum: {}, value: {}", colNum, rowNum, value);
 		
 		ErrorEntity errorEntity = null;
 		

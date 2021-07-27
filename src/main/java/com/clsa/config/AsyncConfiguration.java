@@ -2,8 +2,8 @@ package com.clsa.config;
 
 import java.util.concurrent.Executor;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+//import org.apache.logging.log4j.LogManager;
+//import org.apache.logging.log4j.Logger;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -16,9 +16,9 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
  */
 public class AsyncConfiguration {
 
-	private static final Logger logger = LogManager.getLogger(AsyncConfiguration.class);
+	//private static final Logger logger = LogManager.getLogger(AsyncConfiguration.class);
 	
-	private static final int POOL_SIZE = 8;
+	private static final int POOL_SIZE = 4;
 
     @Bean (name = "taskExecutor")
     public Executor taskExecutor() {
